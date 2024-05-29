@@ -1,0 +1,132 @@
+#Description: Artificial Recurrent Nueral Network (RNN) specifically a LSTM (Long Short Term Memory)
+#Params: 
+#- units (int): Dimensionality of the output space (num memory cells or neurons).
+#- input_shape (tuple): Shape of input data
+
+
+import math
+import pandas_datareader as web
+import numpy as np
+import pandas as pd
+import keras
+import quandl
+
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import Dense, LSTM
+import matplotlib.pyplot as plt
+plt.style.use('fivethirtyeight')
+
+
+quandl.ApiConfig.api_key = 'mJ5muSs_6sYexqwkt7P8'
+ticker = input("What stock do you want analysis on (ticker)? ")
+start_date = '2015-01-01'
+end_date = '2023-12-31'
+
+# Retrieve data from Quandl for the specified date range
+df = quandl.get(f"WIKI/{ticker}", start_date=start_date, end_date=end_date)
+
+df.shape
+print(df.shape)
+
+
+plt.figure(figsize=(16,8))
+
+#Use close but there was issue with an API
+plt.title("Adj. Close History")
+plt.plot(df['Adj. Close'])
+plt.xlabel('Date', fontsize = 18)
+plt.ylabel('Closing Price USD ($)', fontsize = 18)
+plt.show()
+
+
+data = df.filter(['Close'])
+dataset = data.values
+
+#training data size
+trainsize = 0.8
+training_data_len = math.ceil(len(dataset) * trainsize)
+
+#Data scaling (good practice to scale and normalize before feeding the nueral network)
+
+scaler = MinMaxScaler(feature_range=(0,1))
+scaled_data = scaler.fit_transform(dataset)
+
+
+train_data = scaled_data[0:training_data_len, :]
+x_train = []
+y_train = []
+
+for i in range(60, len(train_data)):
+    x_train.append(train_data[i-60: i, 0])
+    y_train.append(train_data[i,0])
+    if i <=60:
+        print(x_train)
+        print(y_train)
+
+
+#Reshaping the data (converting arrays to numpy arrays)
+
+x_train, y_train = np.array(x_train), np.array(y_train)
+
+#LSTM needs the data to be 3 dimensional but the current data is 2 dimensional
+
+x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+
+#Build LSTM Model
+model = Sequential()
+model.add(LSTM(50,return_sequences = True, input_shape = (x_train.shape[1],1 )))
+model.add(LSTM(50,return_sequences = False))
+model.add(Dense(25))
+model.add(Dense(1))
+
+#Compile model
+model.compile(optimizer = 'adam', loss = 'mean_squared_error')
+
+#Train model
+model.fit(x_train, y_train, batch_size = 1, epochs = 1)
+
+#Create array for the test values
+test_data = scaled_data[training_data_len - 60:, :]
+
+#Create teh datasets for x_test and y_test
+
+x_test = []
+y_test = dataset[training_data_len:,:]
+for i in range(60, len(test_data)):
+    x_test.append(test_data[i-60:i,0])
+
+#Covnert dat to numpy to array
+x_test = np.array(x_test)
+
+#reshape data
+x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1],1))
+
+#Get the models predicted values
+predictions = model.predict(x_test)
+
+#Unscaling to compare against y_test
+predictions = scaler.inverse_transform(predictions)
+
+
+#Model evaluation through RMSE (Root mean squared error). Low values = better fit where 0 is perfect
+
+rmse = np.sqrt(np.mean(predictions - y_test)**2)
+
+print("RMSE", rmse)
+
+
+#Plot data
+train = data[:training_data_len]
+valid = data[training_data_len:]
+valid['Predictions'] = predictions
+plt.figure(figsize=(16,8))
+
+#Use close but there was issue with an API
+plt.title("Model")
+plt.plot(train['Close'])
+plt.plot(valid[['Close','Predictions']])
+plt.xlabel('Date', fontsize = 18)
+plt.ylabel('Predicted Adjusted Closing Price USD ($)', fontsize = 18)
+plt.legend(['Train','Val','Predictions'], loc = 'lower right')
+plt.show()
