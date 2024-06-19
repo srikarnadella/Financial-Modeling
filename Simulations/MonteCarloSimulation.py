@@ -38,7 +38,7 @@ def simulate(ticker, name):
     stdev = log_returns.std()
 
     #How far in the future do we want to go in days
-    t_intervals = 365
+    t_intervals = 365*10
 
     #How many simulations:
     iterations = 10
